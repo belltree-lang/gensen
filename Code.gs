@@ -266,22 +266,23 @@ function gensenReflectAnnualSummaryToCalcSheet() {
 
   const headers = values[0];
   const headerIndex = gensenBuildHeaderIndex_(headers);
-  const requiredHeaders = ['従業員番号', '総支給額', '社会保険', '雇用保険', '源泉所得税'];
-  requiredHeaders.forEach((header) => {
-    if (headerIndex[header] === undefined) {
-      throw new Error('年次集計に必要な列がありません: ' + header);
-    }
-  });
+  const employeeIdIndex = gensenResolveHeaderIndex_(headerIndex, ['従業員番号']);
+  const grossIndex = gensenResolveHeaderIndex_(headerIndex, ['年間総支給額', '総支給額']);
+  const socialInsuranceIndex = gensenResolveHeaderIndex_(headerIndex, ['社会保険']);
+  const employmentInsuranceIndex = gensenResolveHeaderIndex_(headerIndex, ['雇用保険']);
+  const withholdingTaxIndex = gensenResolveHeaderIndex_(headerIndex, ['年間源泉所得税', '源泉所得税']);
 
-  const row = values.slice(1).find((dataRow) => String(dataRow[headerIndex['従業員番号']]).trim() === employeeId);
+  const row = values
+    .slice(1)
+    .find((dataRow) => String(dataRow[employeeIdIndex]).trim() === employeeId);
   if (!row) {
     throw new Error('年次集計に従業員番号が見つかりません: ' + employeeId);
   }
 
-  const gross = Number(row[headerIndex['総支給額']]) || 0;
-  const socialInsurance = Number(row[headerIndex['社会保険']]) || 0;
-  const employmentInsurance = Number(row[headerIndex['雇用保険']]) || 0;
-  const withholdingTax = Number(row[headerIndex['源泉所得税']]) || 0;
+  const gross = Number(row[grossIndex]) || 0;
+  const socialInsurance = Number(row[socialInsuranceIndex]) || 0;
+  const employmentInsurance = Number(row[employmentInsuranceIndex]) || 0;
+  const withholdingTax = Number(row[withholdingTaxIndex]) || 0;
   const dependents =
     headerIndex['扶養人数'] !== undefined ? Number(row[headerIndex['扶養人数']]) || 0 : null;
 
@@ -429,6 +430,15 @@ function gensenBuildHeaderIndex_(headers) {
     index[String(header).trim()] = i;
   });
   return index;
+}
+
+function gensenResolveHeaderIndex_(headerIndex, candidates) {
+  for (const candidate of candidates) {
+    if (headerIndex[candidate] !== undefined) {
+      return headerIndex[candidate];
+    }
+  }
+  throw new Error('年次集計に必要な列がありません: ' + candidates.join(' / '));
 }
 
 function gensenGetSheetHeaders_(sheet) {
