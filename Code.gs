@@ -5,6 +5,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('源泉徴収')
     .addItem('年次集計を作成', 'gensenCreateAnnualSummary')
+    .addItem('年次集計を計算台に反映', 'gensenReflectAnnualSummaryToCalcSheet')
     .addItem('計算台を開く', 'gensenOpenCalcSheet')
     .addItem('確定データに反映', 'gensenUpsertConfirmedData')
     .addItem('帳票を生成', 'gensenGenerateReports')
@@ -24,6 +25,7 @@ const GENSEN_CONFIG = {
   confirmedSheetPrefix: '源泉徴収_確定データ_',
   reportTemplateSheetName: '源泉徴収票_帳票テンプレ',
   summaryHeaders: ['従業員番号', '総支給額', '社会保険', '雇用保険', '源泉所得税'],
+  optionalSummaryHeaders: ['扶養人数'],
 
   confirmedFields: [
     { header: '従業員ID', rangeName: '源泉徴収_従業員ID' },
@@ -46,6 +48,13 @@ const GENSEN_CONFIG = {
   ],
 
   reportFolderName: '源泉徴収',
+  reflectTargets: {
+    employeeIdRangeName: '源泉徴収_従業員ID',
+    grossRangeName: '源泉徴収_年間総支給額',
+    socialInsuranceRangeName: '源泉徴収_社会保険料合計',
+    withholdingTaxRangeName: '源泉徴収_源泉徴収税額合計',
+    dependentsRangeName: '源泉徴収_扶養人数',
+  },
 };
 
 function gensenCreateAnnualSummary() {
@@ -145,20 +154,29 @@ function gensenCreateAnnualSummary() {
 
   const sheetName = GENSEN_CONFIG.annualSummarySheetPrefix + year;
   const summarySheet = gensenGetOrCreateSheet_(ss, sheetName);
+  const existingHeaders = gensenGetSheetHeaders_(summarySheet);
+  const includeDependents = existingHeaders.includes('扶養人数');
   summarySheet.clearContents();
 
-  const output = [GENSEN_CONFIG.summaryHeaders];
+  const summaryHeaders = includeDependents
+    ? GENSEN_CONFIG.summaryHeaders.concat(GENSEN_CONFIG.optionalSummaryHeaders)
+    : GENSEN_CONFIG.summaryHeaders;
+  const output = [summaryHeaders];
   Object.keys(summary)
     .sort()
     .forEach((employeeId) => {
       const item = summary[employeeId];
-      output.push([
+      const row = [
         item.employeeId,
         item.gross,
         item.socialInsurance,
         item.employmentInsurance,
         item.withholdingTax,
-      ]);
+      ];
+      if (includeDependents) {
+        row.push(item.dependents);
+      }
+      output.push(row);
     });
 
   summarySheet.getRange(1, 1, output.length, output[0].length).setValues(output);
@@ -173,6 +191,81 @@ function gensenOpenCalcSheet() {
     throw new Error('計算台シートが見つかりません: ' + sheetName);
   }
   ss.setActiveSheet(sheet);
+}
+
+function gensenReflectAnnualSummaryToCalcSheet() {
+  const ss = SpreadsheetApp.getActive();
+  const year = gensenGetTargetYear_();
+  const summarySheetName = GENSEN_CONFIG.annualSummarySheetPrefix + year;
+  const summarySheet = ss.getSheetByName(summarySheetName);
+  if (!summarySheet) {
+    throw new Error('年次集計シートが見つかりません: ' + summarySheetName);
+  }
+
+  const calcSheetName = GENSEN_CONFIG.calcSheetPrefix + year;
+  const calcSheet = ss.getSheetByName(calcSheetName);
+  if (!calcSheet) {
+    throw new Error('計算台シートが見つかりません: ' + calcSheetName);
+  }
+
+  const employeeRange = gensenGetNamedRangeOnSheet_(
+    ss,
+    GENSEN_CONFIG.reflectTargets.employeeIdRangeName,
+    calcSheet
+  );
+  const employeeId = String(employeeRange.getValue() || '').trim();
+  if (!employeeId) {
+    throw new Error('計算台の従業員IDが取得できません。');
+  }
+
+  const values = summarySheet.getDataRange().getValues();
+  if (values.length < 2) {
+    throw new Error('年次集計にデータがありません。');
+  }
+
+  const headers = values[0];
+  const headerIndex = gensenBuildHeaderIndex_(headers);
+  const requiredHeaders = ['従業員番号', '総支給額', '社会保険', '雇用保険', '源泉所得税'];
+  requiredHeaders.forEach((header) => {
+    if (headerIndex[header] === undefined) {
+      throw new Error('年次集計に必要な列がありません: ' + header);
+    }
+  });
+
+  const row = values.slice(1).find((dataRow) => String(dataRow[headerIndex['従業員番号']]).trim() === employeeId);
+  if (!row) {
+    throw new Error('年次集計に従業員番号が見つかりません: ' + employeeId);
+  }
+
+  const gross = Number(row[headerIndex['総支給額']]) || 0;
+  const socialInsurance = Number(row[headerIndex['社会保険']]) || 0;
+  const employmentInsurance = Number(row[headerIndex['雇用保険']]) || 0;
+  const withholdingTax = Number(row[headerIndex['源泉所得税']]) || 0;
+  const dependents =
+    headerIndex['扶養人数'] !== undefined ? Number(row[headerIndex['扶養人数']]) || 0 : null;
+
+  gensenGetNamedRangeOnSheet_(
+    ss,
+    GENSEN_CONFIG.reflectTargets.grossRangeName,
+    calcSheet
+  ).setValue(gross);
+  gensenGetNamedRangeOnSheet_(
+    ss,
+    GENSEN_CONFIG.reflectTargets.socialInsuranceRangeName,
+    calcSheet
+  ).setValue(socialInsurance + employmentInsurance);
+  gensenGetNamedRangeOnSheet_(
+    ss,
+    GENSEN_CONFIG.reflectTargets.withholdingTaxRangeName,
+    calcSheet
+  ).setValue(withholdingTax);
+
+  if (dependents !== null) {
+    const dependentsRange = ss.getRangeByName(GENSEN_CONFIG.reflectTargets.dependentsRangeName);
+    if (dependentsRange && dependentsRange.getSheet().getName() === calcSheet.getName()) {
+      dependentsRange.setValue(dependents);
+    }
+  }
 }
 
 function gensenUpsertConfirmedData() {
@@ -295,6 +388,27 @@ function gensenBuildHeaderIndex_(headers) {
     index[String(header).trim()] = i;
   });
   return index;
+}
+
+function gensenGetSheetHeaders_(sheet) {
+  if (sheet.getLastRow() < 1 || sheet.getLastColumn() < 1) {
+    return [];
+  }
+  return sheet
+    .getRange(1, 1, 1, sheet.getLastColumn())
+    .getValues()[0]
+    .map((header) => String(header).trim());
+}
+
+function gensenGetNamedRangeOnSheet_(ss, rangeName, sheet) {
+  const range = ss.getRangeByName(rangeName);
+  if (!range) {
+    throw new Error('Named Range が見つかりません: ' + rangeName);
+  }
+  if (range.getSheet().getName() !== sheet.getName()) {
+    throw new Error('Named Range の参照先が計算台ではありません: ' + rangeName);
+  }
+  return range;
 }
 
 function gensenExtractYearFromMonth_(monthValue) {
