@@ -19,21 +19,11 @@ const GENSEN_CONFIG = {
   settingsSheetName: '設定',
   settingsYearCell: 'B2',
 
-  monthlySheetName: '月次給与データ',
-  monthlyHeaderRow: 1,
-  monthlyColumns: {
-    year: '年度',
-    employeeId: '従業員ID',
-    name: '氏名',
-    gross: '年間総支給額',
-    socialInsurance: '社会保険料合計',
-    withholdingTax: '源泉徴収税額合計',
-  },
-
   annualSummarySheetPrefix: '年次集計_',
   calcSheetPrefix: '源泉徴収_計算台_',
   confirmedSheetPrefix: '源泉徴収_確定データ_',
   reportTemplateSheetName: '源泉徴収票_帳票テンプレ',
+  summaryHeaders: ['従業員番号', '総支給額', '社会保険', '雇用保険', '源泉所得税'],
 
   confirmedFields: [
     { header: '従業員ID', rangeName: '源泉徴収_従業員ID' },
@@ -61,67 +51,70 @@ const GENSEN_CONFIG = {
 function gensenCreateAnnualSummary() {
   const ss = SpreadsheetApp.getActive();
   const year = gensenGetTargetYear_();
-  const monthlySheet = ss.getSheetByName(GENSEN_CONFIG.monthlySheetName);
-  if (!monthlySheet) {
-    throw new Error('月次給与データのシートが見つかりません。設定を確認してください。');
-  }
-
-  const dataRange = monthlySheet.getDataRange();
-  const values = dataRange.getValues();
-  if (values.length <= GENSEN_CONFIG.monthlyHeaderRow) {
-    throw new Error('月次給与データにヘッダー以外の行がありません。');
-  }
-
-  const headers = values[GENSEN_CONFIG.monthlyHeaderRow - 1];
-  const headerIndex = gensenBuildHeaderIndex_(headers);
-  const col = GENSEN_CONFIG.monthlyColumns;
-  const required = [col.year, col.employeeId, col.name, col.gross, col.socialInsurance, col.withholdingTax];
-  required.forEach((name) => {
-    if (!(name in headerIndex)) {
-      throw new Error('月次給与データのヘッダーに必要な列がありません: ' + name);
-    }
-  });
-
   const summary = {};
-  values.slice(GENSEN_CONFIG.monthlyHeaderRow).forEach((row) => {
-    const rowYear = String(row[headerIndex[col.year]]).trim();
-    if (rowYear !== String(year)) {
+  const targetYear = String(year);
+  const excludedNames = new Set([
+    GENSEN_CONFIG.settingsSheetName,
+    GENSEN_CONFIG.reportTemplateSheetName,
+  ]);
+
+  ss.getSheets().forEach((sheet) => {
+    const sheetName = sheet.getName();
+    if (
+      excludedNames.has(sheetName) ||
+      sheetName.startsWith(GENSEN_CONFIG.annualSummarySheetPrefix) ||
+      sheetName.startsWith(GENSEN_CONFIG.calcSheetPrefix) ||
+      sheetName.startsWith(GENSEN_CONFIG.confirmedSheetPrefix)
+    ) {
       return;
     }
-    const employeeId = String(row[headerIndex[col.employeeId]]).trim();
-    if (!employeeId) {
+
+    const lastRow = sheet.getLastRow();
+    const lastColumn = sheet.getLastColumn();
+    if (lastRow < 2 || lastColumn < 19) {
       return;
     }
-    if (!summary[employeeId]) {
-      summary[employeeId] = {
-        employeeId,
-        name: row[headerIndex[col.name]],
-        gross: 0,
-        socialInsurance: 0,
-        withholdingTax: 0,
-      };
-    }
-    summary[employeeId].gross += Number(row[headerIndex[col.gross]]) || 0;
-    summary[employeeId].socialInsurance += Number(row[headerIndex[col.socialInsurance]]) || 0;
-    summary[employeeId].withholdingTax += Number(row[headerIndex[col.withholdingTax]]) || 0;
+
+    const values = sheet.getRange(2, 1, lastRow - 1, lastColumn).getValues();
+    values.forEach((row) => {
+      const rowYear = gensenExtractYearFromMonth_(row[1]);
+      if (rowYear !== targetYear) {
+        return;
+      }
+      const employeeId = String(row[2]).trim();
+      if (!employeeId) {
+        return;
+      }
+      if (!summary[employeeId]) {
+        summary[employeeId] = {
+          employeeId,
+          gross: 0,
+          socialInsurance: 0,
+          employmentInsurance: 0,
+          withholdingTax: 0,
+        };
+      }
+      summary[employeeId].gross += Number(row[14]) || 0;
+      summary[employeeId].socialInsurance += Number(row[15]) || 0;
+      summary[employeeId].employmentInsurance += Number(row[16]) || 0;
+      summary[employeeId].withholdingTax += Number(row[18]) || 0;
+    });
   });
 
   const sheetName = GENSEN_CONFIG.annualSummarySheetPrefix + year;
   const summarySheet = gensenGetOrCreateSheet_(ss, sheetName);
   summarySheet.clearContents();
 
-  const output = [
-    ['従業員ID', '氏名', '年間総支給額', '社会保険料合計', '源泉徴収税額合計'],
-  ];
+  const output = [GENSEN_CONFIG.summaryHeaders];
   Object.keys(summary)
     .sort()
     .forEach((employeeId) => {
       const item = summary[employeeId];
       output.push([
         item.employeeId,
-        item.name,
         item.gross,
         item.socialInsurance,
+        item.employmentInsurance,
         item.withholdingTax,
       ]);
     });
@@ -260,6 +253,25 @@ function gensenBuildHeaderIndex_(headers) {
     index[String(header).trim()] = i;
   });
   return index;
+}
+
+function gensenExtractYearFromMonth_(monthValue) {
+  if (!monthValue) {
+    return '';
+  }
+  if (Object.prototype.toString.call(monthValue) === '[object Date]' && !isNaN(monthValue.getTime())) {
+    return String(monthValue.getFullYear());
+  }
+  const normalized = String(monthValue).trim();
+  const match = normalized.match(/^(\d{4})\s*\/\s*\d{1,2}$/);
+  if (match) {
+    return match[1];
+  }
+  const numericMatch = normalized.match(/^(\d{4})(\d{2})$/);
+  if (numericMatch) {
+    return numericMatch[1];
+  }
+  return '';
 }
 
 function gensenGetOrCreateSheet_(ss, sheetName) {
