@@ -53,6 +53,16 @@ function gensenCreateAnnualSummary() {
   const year = gensenGetTargetYear_();
   const summary = {};
   const targetYear = String(year);
+  const columnMap = {
+    month: 2, // B: 月分（YYYY/MM）
+    employeeId: 3, // C: 従業員番号
+    employeeName: 4, // D: 従業員名
+    gross: 15, // O: 総支給額
+    socialInsurance: 16, // P: 社会保険
+    employmentInsurance: 17, // Q: 雇用保険
+    withholdingTax: 19, // S: 源泉所得税
+    dependents: 20, // T: 扶養人数（参考）
+  };
   const excludedNames = new Set([
     GENSEN_CONFIG.settingsSheetName,
     GENSEN_CONFIG.reportTemplateSheetName,
@@ -70,34 +80,66 @@ function gensenCreateAnnualSummary() {
     }
 
     const lastRow = sheet.getLastRow();
-    const lastColumn = sheet.getLastColumn();
-    if (lastRow < 2 || lastColumn < 19) {
+    if (lastRow < 2) {
       return;
     }
 
-    const values = sheet.getRange(2, 1, lastRow - 1, lastColumn).getValues();
-    values.forEach((row) => {
-      const rowYear = gensenExtractYearFromMonth_(row[1]);
+    const numRows = lastRow - 1;
+    const monthValues = sheet.getRange(2, columnMap.month, numRows, 1).getValues();
+    const employeeIdValues = sheet.getRange(2, columnMap.employeeId, numRows, 1).getValues();
+    const employeeNameValues = sheet.getRange(2, columnMap.employeeName, numRows, 1).getValues();
+    const grossValues = sheet.getRange(2, columnMap.gross, numRows, 1).getValues();
+    const socialInsuranceValues = sheet.getRange(
+      2,
+      columnMap.socialInsurance,
+      numRows,
+      1
+    ).getValues();
+    const employmentInsuranceValues = sheet.getRange(
+      2,
+      columnMap.employmentInsurance,
+      numRows,
+      1
+    ).getValues();
+    const withholdingTaxValues = sheet.getRange(
+      2,
+      columnMap.withholdingTax,
+      numRows,
+      1
+    ).getValues();
+    const dependentsValues = sheet.getRange(2, columnMap.dependents, numRows, 1).getValues();
+
+    monthValues.forEach((row, index) => {
+      const rowYear = gensenExtractYearFromMonth_(row[0]);
       if (rowYear !== targetYear) {
         return;
       }
-      const employeeId = String(row[2]).trim();
+      const employeeId = String(employeeIdValues[index][0]).trim();
       if (!employeeId) {
         return;
       }
+      const employeeName = String(employeeNameValues[index][0] || '').trim();
+      const dependents = Number(dependentsValues[index][0]) || 0;
       if (!summary[employeeId]) {
         summary[employeeId] = {
           employeeId,
+          employeeName,
+          dependents,
           gross: 0,
           socialInsurance: 0,
           employmentInsurance: 0,
           withholdingTax: 0,
         };
+      } else {
+        if (employeeName) {
+          summary[employeeId].employeeName = employeeName;
+        }
+        summary[employeeId].dependents = dependents;
       }
-      summary[employeeId].gross += Number(row[14]) || 0;
-      summary[employeeId].socialInsurance += Number(row[15]) || 0;
-      summary[employeeId].employmentInsurance += Number(row[16]) || 0;
-      summary[employeeId].withholdingTax += Number(row[18]) || 0;
+      summary[employeeId].gross += Number(grossValues[index][0]) || 0;
+      summary[employeeId].socialInsurance += Number(socialInsuranceValues[index][0]) || 0;
+      summary[employeeId].employmentInsurance += Number(employmentInsuranceValues[index][0]) || 0;
+      summary[employeeId].withholdingTax += Number(withholdingTaxValues[index][0]) || 0;
     });
   });
 
