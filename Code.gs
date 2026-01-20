@@ -119,15 +119,56 @@ function gensenCreateAnnualSummary() {
     const dependentsValues = sheet.getRange(2, columnMap.dependents, numRows, 1).getValues();
 
     monthValues.forEach((row, index) => {
-      const rowYear = gensenExtractYearFromMonth_(row[0]);
+      const rowNumber = index + 2;
+      const monthValue = row[0];
+      const rowYear = gensenExtractYearFromMonth_(monthValue);
+      if (!rowYear) {
+        gensenLogAnnualSummaryIssue_(
+          sheetName,
+          rowNumber,
+          '月分がYYYY/MM形式でパースできません。',
+          monthValue
+        );
+        return;
+      }
       if (rowYear !== targetYear) {
         return;
       }
       const employeeId = String(employeeIdValues[index][0]).trim();
       if (!employeeId) {
+        gensenLogAnnualSummaryIssue_(
+          sheetName,
+          rowNumber,
+          '従業員番号が空です。',
+          employeeIdValues[index][0]
+        );
         return;
       }
       const employeeName = String(employeeNameValues[index][0] || '').trim();
+      const gross = gensenParseAnnualSummaryAmount_(
+        grossValues[index][0],
+        sheetName,
+        rowNumber,
+        '総支給額'
+      );
+      const socialInsurance = gensenParseAnnualSummaryAmount_(
+        socialInsuranceValues[index][0],
+        sheetName,
+        rowNumber,
+        '社会保険'
+      );
+      const employmentInsurance = gensenParseAnnualSummaryAmount_(
+        employmentInsuranceValues[index][0],
+        sheetName,
+        rowNumber,
+        '雇用保険'
+      );
+      const withholdingTax = gensenParseAnnualSummaryAmount_(
+        withholdingTaxValues[index][0],
+        sheetName,
+        rowNumber,
+        '源泉所得税'
+      );
       const dependents = Number(dependentsValues[index][0]) || 0;
       if (!summary[employeeId]) {
         summary[employeeId] = {
@@ -145,10 +186,10 @@ function gensenCreateAnnualSummary() {
         }
         summary[employeeId].dependents = dependents;
       }
-      summary[employeeId].gross += Number(grossValues[index][0]) || 0;
-      summary[employeeId].socialInsurance += Number(socialInsuranceValues[index][0]) || 0;
-      summary[employeeId].employmentInsurance += Number(employmentInsuranceValues[index][0]) || 0;
-      summary[employeeId].withholdingTax += Number(withholdingTaxValues[index][0]) || 0;
+      summary[employeeId].gross += gross;
+      summary[employeeId].socialInsurance += socialInsurance;
+      summary[employeeId].employmentInsurance += employmentInsurance;
+      summary[employeeId].withholdingTax += withholdingTax;
     });
   });
 
@@ -428,6 +469,40 @@ function gensenExtractYearFromMonth_(monthValue) {
     return numericMatch[1];
   }
   return '';
+}
+
+function gensenParseAnnualSummaryAmount_(value, sheetName, rowNumber, label) {
+  const normalized = String(value).trim();
+  if (normalized === '') {
+    gensenLogAnnualSummaryIssue_(
+      sheetName,
+      rowNumber,
+      label + 'が数値ではありません。',
+      value
+    );
+    return 0;
+  }
+  const numberValue = Number(value);
+  if (Number.isNaN(numberValue)) {
+    gensenLogAnnualSummaryIssue_(
+      sheetName,
+      rowNumber,
+      label + 'が数値ではありません。',
+      value
+    );
+    return 0;
+  }
+  return numberValue;
+}
+
+function gensenLogAnnualSummaryIssue_(sheetName, rowNumber, message, value) {
+  Logger.log(
+    '[年次集計] %s シート=%s 行=%s 値=%s',
+    message,
+    sheetName,
+    rowNumber,
+    value
+  );
 }
 
 function gensenGetOrCreateSheet_(ss, sheetName) {
