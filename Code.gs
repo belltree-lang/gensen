@@ -24,8 +24,10 @@ const GENSEN_CONFIG = {
   calcSheetPrefix: '源泉徴収_計算台_',
   confirmedSheetPrefix: '源泉徴収_確定データ_',
   reportTemplateSheetName: '源泉徴収票_帳票テンプレ',
+  employeeMasterSheetName: '従業員名簿（労働者）',
   summaryHeaders: ['従業員名', '従業員番号', '総支給額', '社会保険', '雇用保険', '源泉所得税'],
   optionalSummaryHeaders: ['扶養人数'],
+  employeeMasterHeaders: ['フリガナ', '氏名', '住所', '生年月日'],
 
   confirmedFields: [
     { header: '従業員ID', rangeName: '源泉徴収_従業員ID' },
@@ -199,10 +201,12 @@ function gensenCreateAnnualSummary() {
   const existingHeaders = gensenGetSheetHeaders_(summarySheet);
   const includeDependents = existingHeaders.includes('扶養人数');
   summarySheet.clearContents();
+  const employeeMasterData = gensenLoadEmployeeMasterData_(ss);
 
-  const summaryHeaders = includeDependents
+  const summaryHeaders = (includeDependents
     ? GENSEN_CONFIG.summaryHeaders.concat(GENSEN_CONFIG.optionalSummaryHeaders)
-    : GENSEN_CONFIG.summaryHeaders;
+    : GENSEN_CONFIG.summaryHeaders.slice()
+  ).concat(GENSEN_CONFIG.employeeMasterHeaders);
   const output = [summaryHeaders];
   Object.keys(summary)
     .sort()
@@ -219,6 +223,13 @@ function gensenCreateAnnualSummary() {
       if (includeDependents) {
         row.push(item.dependents);
       }
+      const master = employeeMasterData[employeeName] || {};
+      row.push(
+        master.furigana || '',
+        master.name || '',
+        master.address || '',
+        master.birthdate || ''
+      );
       output.push(row);
     });
 
@@ -456,6 +467,41 @@ function gensenGetSheetHeaders_(sheet) {
     .getRange(1, 1, 1, sheet.getLastColumn())
     .getValues()[0]
     .map((header) => String(header).trim());
+}
+
+function gensenLoadEmployeeMasterData_(ss) {
+  const sheet = ss.getSheetByName(GENSEN_CONFIG.employeeMasterSheetName);
+  if (!sheet) {
+    throw new Error('従業員名簿（労働者）シートが見つかりません。');
+  }
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 2) {
+    return {};
+  }
+  const headers = values[0].map((header) => String(header).trim());
+  const headerIndex = gensenBuildHeaderIndex_(headers);
+  const requiredHeaders = GENSEN_CONFIG.employeeMasterHeaders;
+  const missingHeaders = requiredHeaders.filter((header) => headerIndex[header] === undefined);
+  if (missingHeaders.length > 0) {
+    throw new Error(
+      '従業員名簿（労働者）シートに必要な列がありません: ' + missingHeaders.join(', ')
+    );
+  }
+  const data = {};
+  values.slice(1).forEach((row) => {
+    const name = String(row[headerIndex['氏名']] || '').trim();
+    const normalizedName = normalizeEmployeeName(name);
+    if (!normalizedName) {
+      return;
+    }
+    data[normalizedName] = {
+      furigana: row[headerIndex['フリガナ']],
+      name: row[headerIndex['氏名']],
+      address: row[headerIndex['住所']],
+      birthdate: row[headerIndex['生年月日']],
+    };
+  });
+  return data;
 }
 
 function normalizeEmployeeName(name) {
