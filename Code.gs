@@ -135,7 +135,8 @@ function gensenCreateAnnualSummary() {
         return;
       }
       const employeeName = String(employeeNameValues[index][0] || '').trim();
-      if (!employeeName) {
+      const normalizedEmployeeName = normalizeEmployeeName(employeeName);
+      if (!normalizedEmployeeName) {
         gensenLogAnnualSummaryIssue_(
           sheetName,
           rowNumber,
@@ -170,8 +171,8 @@ function gensenCreateAnnualSummary() {
         '源泉所得税'
       );
       const dependents = Number(dependentsValues[index][0]) || 0;
-      if (!summary[employeeName]) {
-        summary[employeeName] = {
+      if (!summary[normalizedEmployeeName]) {
+        summary[normalizedEmployeeName] = {
           employeeId,
           employeeName,
           dependents,
@@ -182,14 +183,14 @@ function gensenCreateAnnualSummary() {
         };
       } else {
         if (employeeId) {
-          summary[employeeName].employeeId = employeeId;
+          summary[normalizedEmployeeName].employeeId = employeeId;
         }
-        summary[employeeName].dependents = dependents;
+        summary[normalizedEmployeeName].dependents = dependents;
       }
-      summary[employeeName].gross += gross;
-      summary[employeeName].socialInsurance += socialInsurance;
-      summary[employeeName].employmentInsurance += employmentInsurance;
-      summary[employeeName].withholdingTax += withholdingTax;
+      summary[normalizedEmployeeName].gross += gross;
+      summary[normalizedEmployeeName].socialInsurance += socialInsurance;
+      summary[normalizedEmployeeName].employmentInsurance += employmentInsurance;
+      summary[normalizedEmployeeName].withholdingTax += withholdingTax;
     });
   });
 
@@ -256,7 +257,8 @@ function gensenReflectAnnualSummaryToCalcSheet() {
     calcSheet
   );
   const employeeName = String(employeeNameRange.getValue() || '').trim();
-  if (!employeeName) {
+  const normalizedEmployeeName = normalizeEmployeeName(employeeName);
+  if (!normalizedEmployeeName) {
     throw new Error('計算台の従業員名が取得できません。');
   }
 
@@ -275,7 +277,11 @@ function gensenReflectAnnualSummaryToCalcSheet() {
 
   const row = values
     .slice(1)
-    .find((dataRow) => String(dataRow[employeeNameIndex]).trim() === employeeName);
+    .find(
+      (dataRow) =>
+        normalizeEmployeeName(String(dataRow[employeeNameIndex] || '')) ===
+        normalizedEmployeeName
+    );
   if (!row) {
     throw new Error('年次集計に従業員名が見つかりません: ' + employeeName);
   }
@@ -450,6 +456,13 @@ function gensenGetSheetHeaders_(sheet) {
     .getRange(1, 1, 1, sheet.getLastColumn())
     .getValues()[0]
     .map((header) => String(header).trim());
+}
+
+function normalizeEmployeeName(name) {
+  return String(name || '')
+    .replace(/\u3000/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function gensenGetNamedRangeOnSheet_(ss, rangeName, sheet) {
