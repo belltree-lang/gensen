@@ -24,7 +24,7 @@ const GENSEN_CONFIG = {
   calcSheetPrefix: '源泉徴収_計算台_',
   confirmedSheetPrefix: '源泉徴収_確定データ_',
   reportTemplateSheetName: '源泉徴収票_帳票テンプレ',
-  summaryHeaders: ['従業員番号', '総支給額', '社会保険', '雇用保険', '源泉所得税'],
+  summaryHeaders: ['従業員名', '従業員番号', '総支給額', '社会保険', '雇用保険', '源泉所得税'],
   optionalSummaryHeaders: ['扶養人数'],
 
   confirmedFields: [
@@ -134,17 +134,17 @@ function gensenCreateAnnualSummary() {
       if (rowYear !== targetYear) {
         return;
       }
-      const employeeId = String(employeeIdValues[index][0]).trim();
-      if (!employeeId) {
+      const employeeName = String(employeeNameValues[index][0] || '').trim();
+      if (!employeeName) {
         gensenLogAnnualSummaryIssue_(
           sheetName,
           rowNumber,
-          '従業員番号が空です。',
-          employeeIdValues[index][0]
+          '従業員名が空です。',
+          employeeNameValues[index][0]
         );
         return;
       }
-      const employeeName = String(employeeNameValues[index][0] || '').trim();
+      const employeeId = String(employeeIdValues[index][0]).trim();
       const gross = gensenParseAnnualSummaryAmount_(
         grossValues[index][0],
         sheetName,
@@ -170,8 +170,8 @@ function gensenCreateAnnualSummary() {
         '源泉所得税'
       );
       const dependents = Number(dependentsValues[index][0]) || 0;
-      if (!summary[employeeId]) {
-        summary[employeeId] = {
+      if (!summary[employeeName]) {
+        summary[employeeName] = {
           employeeId,
           employeeName,
           dependents,
@@ -181,15 +181,15 @@ function gensenCreateAnnualSummary() {
           withholdingTax: 0,
         };
       } else {
-        if (employeeName) {
-          summary[employeeId].employeeName = employeeName;
+        if (employeeId) {
+          summary[employeeName].employeeId = employeeId;
         }
-        summary[employeeId].dependents = dependents;
+        summary[employeeName].dependents = dependents;
       }
-      summary[employeeId].gross += gross;
-      summary[employeeId].socialInsurance += socialInsurance;
-      summary[employeeId].employmentInsurance += employmentInsurance;
-      summary[employeeId].withholdingTax += withholdingTax;
+      summary[employeeName].gross += gross;
+      summary[employeeName].socialInsurance += socialInsurance;
+      summary[employeeName].employmentInsurance += employmentInsurance;
+      summary[employeeName].withholdingTax += withholdingTax;
     });
   });
 
@@ -205,9 +205,10 @@ function gensenCreateAnnualSummary() {
   const output = [summaryHeaders];
   Object.keys(summary)
     .sort()
-    .forEach((employeeId) => {
-      const item = summary[employeeId];
+    .forEach((employeeName) => {
+      const item = summary[employeeName];
       const row = [
+        item.employeeName,
         item.employeeId,
         item.gross,
         item.socialInsurance,
@@ -249,14 +250,14 @@ function gensenReflectAnnualSummaryToCalcSheet() {
     throw new Error('計算台シートが見つかりません: ' + calcSheetName);
   }
 
-  const employeeRange = gensenGetNamedRangeOnSheet_(
+  const employeeNameRange = gensenGetNamedRangeOnSheet_(
     ss,
-    GENSEN_CONFIG.reflectTargets.employeeIdRangeName,
+    GENSEN_CONFIG.confirmedFields.find((field) => field.header === '氏名').rangeName,
     calcSheet
   );
-  const employeeId = String(employeeRange.getValue() || '').trim();
-  if (!employeeId) {
-    throw new Error('計算台の従業員IDが取得できません。');
+  const employeeName = String(employeeNameRange.getValue() || '').trim();
+  if (!employeeName) {
+    throw new Error('計算台の従業員名が取得できません。');
   }
 
   const values = summarySheet.getDataRange().getValues();
@@ -266,7 +267,7 @@ function gensenReflectAnnualSummaryToCalcSheet() {
 
   const headers = values[0];
   const headerIndex = gensenBuildHeaderIndex_(headers);
-  const employeeIdIndex = gensenResolveHeaderIndex_(headerIndex, ['従業員番号']);
+  const employeeNameIndex = gensenResolveHeaderIndex_(headerIndex, ['従業員名', '氏名']);
   const grossIndex = gensenResolveHeaderIndex_(headerIndex, ['年間総支給額', '総支給額']);
   const socialInsuranceIndex = gensenResolveHeaderIndex_(headerIndex, ['社会保険']);
   const employmentInsuranceIndex = gensenResolveHeaderIndex_(headerIndex, ['雇用保険']);
@@ -274,9 +275,9 @@ function gensenReflectAnnualSummaryToCalcSheet() {
 
   const row = values
     .slice(1)
-    .find((dataRow) => String(dataRow[employeeIdIndex]).trim() === employeeId);
+    .find((dataRow) => String(dataRow[employeeNameIndex]).trim() === employeeName);
   if (!row) {
-    throw new Error('年次集計に従業員番号が見つかりません: ' + employeeId);
+    throw new Error('年次集計に従業員名が見つかりません: ' + employeeName);
   }
 
   const gross = Number(row[grossIndex]) || 0;
