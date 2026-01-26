@@ -147,11 +147,15 @@ function exportRows(sheetName, rowNumbers, fallbackYear) {
       const [yearStr, monthStr] = monthText.split('/');
       year = parseInt(yearStr, 10);
       monthNum = parseInt(monthStr, 10);
+    } else if (typeof monthCell === 'string' && /^\d{4}\/\d{1,2}$/.test(monthCell)) {
+      const [yearStr, monthStr] = monthCell.split('/');
+      year = parseInt(yearStr, 10);
+      monthNum = parseInt(monthStr, 10);
     } else if (fallbackYear) {
       year = fallbackYear;
       monthNum = fallbackMonthNum;
     } else {
-      SpreadsheetApp.getUi().alert(`【${rowNum}行目／${name}さん：年が確定できません】スキップします。`);
+      SpreadsheetApp.getUi().alert(`【${rowNum}行目／${name}さん：年月が確定できません】スキップします。`);
       return;
     }
     if (!monthNum || isNaN(monthNum)) {
