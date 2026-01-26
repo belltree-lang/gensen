@@ -159,6 +159,7 @@ function exportRows(sheetName, rowNumbers) {
 
     // ==== ファイル名生成 ====
     const parsed = parseYearMonthFromMonthCell_(monthCell, timezone);
+    Logger.log(`[exportRows] row=${rowNum} name=${name} monthCell=${monthCell} parsed=${JSON.stringify(parsed)}`);
     if (!parsed) {
       SpreadsheetApp.getUi().alert(`【${rowNum}行目／${name}さん：年月が確定できません】B列の値を確認してください。`);
       return;
