@@ -1,13 +1,16 @@
 /***** メニュー追加 *****/
 function buildPayrollMenu_() {
+  Logger.log('[buildPayrollMenu_] start');
   SpreadsheetApp.getUi()
     .createMenu('給与明細発行')
     .addItem('給与明細（発行月・行を指定）', 'showMonthAndRowsDialog')
     .addToUi();
+  Logger.log('[buildPayrollMenu_] end');
 }
 
 /***** 月＋行入力のダイアログ *****/
 function showMonthAndRowsDialog() {
+  Logger.log('[showMonthAndRowsDialog] start');
   const html = HtmlService.createHtmlOutput(`
     <h2>給与明細PDF出力</h2>
     <label>発行年</label><br>
@@ -54,16 +57,19 @@ function showMonthAndRowsDialog() {
     </script>
   `).setWidth(380).setHeight(360);
   SpreadsheetApp.getUi().showModalDialog(html, '給与明細PDF出力');
+  Logger.log('[showMonthAndRowsDialog] end');
 }
 
 /***** ダイアログから処理を呼び出し *****/
 function processMonthAndRows(year, month, rowsInput) {
+  Logger.log(`[processMonthAndRows] start year=${year} month=${month} rowsInput=${rowsInput}`);
   const sheetName = `給与明細${month}月支払分`;
   const rowNumbers = parseRowInput(rowsInput);
   if (!rowNumbers.length) return '正しい行番号が入力されていません。';
   const uiYear = parseInt(year, 10);
   const uiMonth = parseInt(month, 10);
   exportRows(sheetName, rowNumbers, uiYear, uiMonth);
+  Logger.log(`[processMonthAndRows] end rowNumbers=${rowNumbers.join(',')}`);
   return '指定した行のPDF出力が完了しました！';
 }
 

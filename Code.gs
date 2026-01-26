@@ -4,9 +4,11 @@
  * - コード（給与明細発行メニュー）
  */
 function onOpen() {
+  Logger.log('[onOpen] start');
   buildPayrollMenu_();
   buildGensenMenu_();
   buildCostMenu_();
+  Logger.log('[onOpen] end');
 }
 
 /**
