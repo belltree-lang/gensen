@@ -1,7 +1,18 @@
 /**
- * 源泉徴収 系メニュー
+ * 削除対象の旧 onOpen()
+ * - Code.gs（源泉徴収メニュー）
+ * - コード（給与明細発行メニュー）
  */
 function onOpen() {
+  buildPayrollMenu_();
+  buildGensenMenu_();
+  buildCostMenu_();
+}
+
+/**
+ * 源泉徴収 系メニュー
+ */
+function buildGensenMenu_() {
   SpreadsheetApp.getUi()
     .createMenu('源泉徴収')
     .addItem('年次集計を作成', 'gensenCreateAnnualSummary')

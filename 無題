@@ -3,6 +3,13 @@
  * 各「給与明細〇月支払分」シートから情報を取得し、
  * 「人件費集計」シートに出力します。
  */
+function buildCostMenu_() {
+  SpreadsheetApp.getUi()
+    .createMenu('人件費')
+    .addItem('部門別人件費集計', 'calcMonthlyCostByDepartment')
+    .addToUi();
+}
+
 function calcMonthlyCostByDepartment() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = ss.getSheets();
