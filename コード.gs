@@ -76,6 +76,7 @@ function showMonthAndRowsDialog() {
     + '      .processMonthAndRows(yearValue, monthValue, rowsValue);'
     + '  }'
     + '</script>';
+  html = '<html><body>' + html + '</body></html>';
   var htmlOutput = HtmlService.createHtmlOutput(html)
     .setWidth(380)
     .setHeight(360);
