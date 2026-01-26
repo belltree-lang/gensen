@@ -30,54 +30,73 @@ function showMonthAndRowsDialog() {
   for (month = 1; month <= 12; month++) {
     monthOptions += '<option value="' + month + '">' + month + '月</option>';
   }
-  var html = '';
-  // Step 1: HTMLを最小構成（input + button）
-  html += '<input id="rows" placeholder="例：5-8,12,20-22" style="width:100%;padding:6px">';
-  html += '<button id="okBtn" onclick="submitForm()">OK</button>';
-  // Step 2: UIの要素を1行ずつ戻す
-  html = '<h2>給与明細PDF出力</h2>' + html;
-  html = '<label>行番号／範囲（複数可）</label><br>' + html;
-  html = html + '<br><small>カンマ区切りで複数指定、ハイフンで範囲指定できます。</small>';
-  html = '<label>発行月</label><br>'
-    + '<select id="month" style="width:100%;padding:6px">'
-    + monthOptions
-    + '</select>'
-    + '<br><br>'
-    + html;
-  html = '<label>発行年</label><br>'
-    + '<select id="year" style="width:100%;padding:6px">'
-    + yearOptions
-    + '</select>'
-    + '<br><br>'
-    + html;
-  html = html + '<br><br><button onclick="google.script.host.close()">キャンセル</button>';
-  html = html
-    + '<script>'
-    + '  function submitForm() {'
-    + '    // Step 3: ボタン取得'
-    + '    var btn = document.getElementById("okBtn");'
-    + '    // Step 4: ボタン無効化'
-    + '    btn.disabled = true;'
-    + '    btn.innerText = "処理中...";'
-    + '    // Step 5: 入力値取得'
-    + '    var yearValue = document.getElementById("year").value;'
-    + '    var monthValue = document.getElementById("month").value;'
-    + '    var rowsValue = document.getElementById("rows").value;'
-    + '    // Step 6: バリデーション'
-    + '    if (!yearValue) { alert("発行年を選択してください"); btn.disabled = false; btn.innerText = "OK"; return; }'
-    + '    if (!monthValue) { alert("発行月を選択してください"); btn.disabled = false; btn.innerText = "OK"; return; }'
-    + '    if (!rowsValue) { alert("行番号を入力してください"); btn.disabled = false; btn.innerText = "OK"; return; }'
-    + '    // Step 7: サーバー呼び出し（ここでダイアログがフリーズ）'
-    + '    google.script.run'
-    + '      .withSuccessHandler(function(msg) {'
-    + '        if (msg) { alert(msg); }'
-    + '        google.script.host.close();'
-    + '      })'
-    + '      .processMonthAndRows(yearValue, monthValue, rowsValue);'
-    + '  }'
-    + '</script>';
-  html = '<html><body>' + html + '</body></html>';
+  var html = `
+<html>
+  <head>
+    <base target="_top">
+  </head>
+  <body>
+    <label>発行年</label><br>
+    <select id="year" style="width:100%;padding:6px">
+      ${yearOptions}
+    </select>
+    <br><br>
+    <label>発行月</label><br>
+    <select id="month" style="width:100%;padding:6px">
+      ${monthOptions}
+    </select>
+    <br><br>
+    <label>行番号／範囲（複数可）</label><br>
+    <h2>給与明細PDF出力</h2>
+    <input id="rows" placeholder="例：5-8,12,20-22" style="width:100%;padding:6px">
+    <button id="okBtn" type="button">OK</button>
+    <br><small>カンマ区切りで複数指定、ハイフンで範囲指定できます。</small>
+    <br><br><button id="cancelBtn" type="button">キャンセル</button>
+    <script>
+      function submitForm() {
+        // Step 3: ボタン取得
+        var btn = document.getElementById("okBtn");
+        // Step 4: ボタン無効化
+        btn.disabled = true;
+        btn.innerText = "処理中...";
+        // Step 5: 入力値取得
+        var yearValue = document.getElementById("year").value;
+        var monthValue = document.getElementById("month").value;
+        var rowsValue = document.getElementById("rows").value;
+        // Step 6: バリデーション
+        if (!yearValue) { alert("発行年を選択してください"); btn.disabled = false; btn.innerText = "OK"; return; }
+        if (!monthValue) { alert("発行月を選択してください"); btn.disabled = false; btn.innerText = "OK"; return; }
+        if (!rowsValue) { alert("行番号を入力してください"); btn.disabled = false; btn.innerText = "OK"; return; }
+        // Step 7: サーバー呼び出し（ここでダイアログがフリーズ）
+        google.script.run
+          .withSuccessHandler(function(msg) {
+            if (msg) { alert(msg); }
+            google.script.host.close();
+          })
+          .processMonthAndRows(yearValue, monthValue, rowsValue);
+      }
+      function bindEvents() {
+        var okBtn = document.getElementById("okBtn");
+        var cancelBtn = document.getElementById("cancelBtn");
+        if (okBtn) {
+          okBtn.addEventListener("click", submitForm);
+        }
+        if (cancelBtn) {
+          cancelBtn.addEventListener("click", function() {
+            google.script.host.close();
+          });
+        }
+      }
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", bindEvents);
+      } else {
+        bindEvents();
+      }
+    </script>
+  </body>
+</html>`;
   var htmlOutput = HtmlService.createHtmlOutput(html)
+    .setSandboxMode(HtmlService.SandboxMode.IFRAME)
     .setWidth(380)
     .setHeight(360);
   SpreadsheetApp.getUi().showModalDialog(htmlOutput, '給与明細PDF出力');
