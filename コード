@@ -62,7 +62,8 @@ function processMonthAndRows(year, month, rowsInput) {
   const rowNumbers = parseRowInput(rowsInput);
   if (!rowNumbers.length) return '正しい行番号が入力されていません。';
   const uiYear = parseInt(year, 10);
-  exportRows(sheetName, rowNumbers, uiYear);
+  const uiMonth = parseInt(month, 10);
+  exportRows(sheetName, rowNumbers, uiYear, uiMonth);
   return '指定した行のPDF出力が完了しました！';
 }
 
@@ -98,27 +99,24 @@ function fetchWithRetry(url, token, retries = 3) {
   }
 }
 
-function parseYearMonthFromMonthCell_(monthCell, timezone) {
-  if (monthCell instanceof Date) {
-    const monthText = Utilities.formatDate(monthCell, timezone, 'MM');
-    return { month: parseInt(monthText, 10) };
-  }
+const PAYROLL_TEMPLATE_CONFIG = {
+  issueDateCell: 'B2',
+  targetYmCell: 'B3'
+};
 
-  if (typeof monthCell === 'string') {
-    const trimmed = monthCell.trim();
-    const match = trimmed.match(/^(\d{4})\/(\d{1,2})(?:\/\d{1,2})?$/);
-    if (!match) {
-      return null;
-    }
-    const month = parseInt(match[2], 10);
-    return { month };
+function getTemplateRange_(ss, templateSheet, rangeName, fallbackA1) {
+  const namedRange = ss.getRangeByName(rangeName);
+  if (namedRange) {
+    return namedRange;
   }
-
-  return null;
+  if (!fallbackA1) {
+    return null;
+  }
+  return templateSheet.getRange(fallbackA1);
 }
 
 /***** 実際のPDF出力処理（ここは既存の exportRows の内容を流用） *****/
-function exportRows(sheetName, rowNumbers, uiYear) {
+function exportRows(sheetName, rowNumbers, uiYear, uiMonth) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(sheetName);
   if (!sheet) { SpreadsheetApp.getUi().alert(`シート「${sheetName}」が見つかりません。`); return; }
@@ -127,7 +125,6 @@ function exportRows(sheetName, rowNumbers, uiYear) {
   const masterTemplate = ss.getSheetByName('給与明細テンプレート元式');
   const folder         = DriveApp.getFolderById('1Jw_QcZ1ph_mi92Y5I2efvpg15VivyV1X');
   const spreadsheetId  = ss.getId();
-  const timezone       = ss.getSpreadsheetTimeZone();
 
   const dataRange      = masterTemplate.getDataRange();
   const numRows        = dataRange.getNumRows();
@@ -140,7 +137,10 @@ function exportRows(sheetName, rowNumbers, uiYear) {
     const name = sheet.getRange(rowNum, 4).getValue();
     if (!name) return;
 
-    const monthCell = sheet.getRange(rowNum, 2).getValue();
+    if (!uiYear || !uiMonth || uiMonth < 1 || uiMonth > 12 || isNaN(uiYear) || isNaN(uiMonth)) {
+      SpreadsheetApp.getUi().alert(`【${rowNum}行目／${name}さん：年月が不正です】発行年・発行月を確認してください。`);
+      return;
+    }
 
     // ==== 数式＆ラベル反映 ====
     for (let r = 0; r < numRows; r++) {
@@ -156,22 +156,24 @@ function exportRows(sheetName, rowNumbers, uiYear) {
     }
     SpreadsheetApp.flush();
 
+    // ==== 対象年月・発行日 ====
+    const issueDate = new Date(uiYear, uiMonth, 0);
+    const targetYm = `${uiYear}年${uiMonth}月分`;
+    const issueDateRange = getTemplateRange_(ss, template, 'PAYROLL_ISSUE_DATE', PAYROLL_TEMPLATE_CONFIG.issueDateCell);
+    const targetYmRange = getTemplateRange_(ss, template, 'PAYROLL_TARGET_YM', PAYROLL_TEMPLATE_CONFIG.targetYmCell);
+    if (!issueDateRange || !targetYmRange) {
+      SpreadsheetApp.getUi().alert('給与明細テンプレートの発行日/対象年月セルが見つかりません。');
+      return;
+    }
+    issueDateRange.setValue(issueDate);
+    targetYmRange.setValue(targetYm);
+
+    Logger.log(`[exportRows] row=${rowNum} name=${name} uiYear=${uiYear} uiMonth=${uiMonth} issueDate=${issueDate} targetYm=${targetYm}`);
+
     // ==== ファイル名生成 ====
-    const parsed = parseYearMonthFromMonthCell_(monthCell, timezone);
-    const monthNum = parsed ? parsed.month : null;
-    const finalYearMonth = monthNum ? `${uiYear}/${monthNum}` : `${uiYear}/?`;
-    Logger.log(`[exportRows] row=${rowNum} name=${name} uiYear=${uiYear} monthCell=${monthCell} finalYearMonth=${finalYearMonth}`);
-    if (!parsed) {
-      SpreadsheetApp.getUi().alert(`【${rowNum}行目／${name}さん：年月が確定できません】B列の値を確認してください。`);
-      return;
-    }
-    if (!uiYear || !monthNum || monthNum < 1 || monthNum > 12 || isNaN(uiYear) || isNaN(monthNum)) {
-      SpreadsheetApp.getUi().alert(`【${rowNum}行目／${name}さん：年月が不正です】B列の値を確認してください。`);
-      return;
-    }
     const reiwaYear = uiYear - 2018;
     const safeName = String(name).replace(/[\/\\:*?"<>|]/g, '');
-    const fileName = `${safeName}_給与支払明細_令和${reiwaYear}年${monthNum}月分`;
+    const fileName = `${safeName}_給与支払明細_令和${reiwaYear}年${uiMonth}月分`;
 
     const folderName = `${safeName}殿`;
     const folders = folder.getFoldersByName(folderName);
