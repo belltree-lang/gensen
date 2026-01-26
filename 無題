@@ -1,0 +1,82 @@
+/**
+ * 部門別・月別の人件費集計（総支給額ベース）
+ * 各「給与明細〇月支払分」シートから情報を取得し、
+ * 「人件費集計」シートに出力します。
+ */
+function calcMonthlyCostByDepartment() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheets = ss.getSheets();
+
+  // 出力シート
+  const outputSheetName = '人件費集計';
+  let outSheet = ss.getSheetByName(outputSheetName);
+  if (!outSheet) outSheet = ss.insertSheet(outputSheetName);
+  outSheet.clearContents();
+
+  // 対象部門
+  const departments = ['治療院', '通所', '24時間', '居宅', '代表'];
+  const result = {}; // { '2025-08': {治療院: 123456, 通所: ...} }
+
+  // 各月の給与明細シートを走査
+  for (const sh of sheets) {
+    const m = sh.getName().match(/給与明細(\d{1,2})月支払分/);
+    if (!m) continue; // 「給与明細◯月支払分」以外はスキップ
+
+    const month = parseInt(m[1], 10);
+    const year = new Date().getFullYear();
+    const key = `${year}-${('0' + month).slice(-2)}`;
+
+    const data = sh.getDataRange().getValues();
+    const headerRow = 1; // ヘッダーが1行目の場合
+    const header = data[headerRow - 1];
+
+    // 柔軟に列名を検出（完全一致でなく部分一致）
+    const deptCol = header.findIndex(h => String(h).includes('部門')) + 1;
+    const totalCol = header.findIndex(h => String(h).includes('総支給')) + 1;
+
+    if (deptCol <= 0 || totalCol <= 0) {
+      Logger.log(`⚠️ 列が見つかりません: シート=${sh.getName()} 部門=${deptCol}, 総支給=${totalCol}`);
+      continue;
+    }
+
+    // 月ごとの初期化
+    if (!result[key]) result[key] = {};
+    departments.forEach(d => result[key][d] = result[key][d] || 0);
+
+    // データ行のループ
+    for (let i = headerRow; i < data.length; i++) {
+      const deptCell = String(data[i][deptCol - 1] || '').trim();
+      const totalStr = String(data[i][totalCol - 1] || '').replace(/,/g, '');
+      const total = parseFloat(totalStr);
+      if (!deptCell || isNaN(total)) continue;
+
+      // 「通所・居宅」「治療院,居宅」などを分割
+      const parts = deptCell.split(/[・,/、]/).map(v => v.trim()).filter(Boolean);
+      const share = total / parts.length;
+
+      // 按分して加算
+      parts.forEach(p => {
+        if (!result[key][p]) result[key][p] = 0;
+        result[key][p] += share;
+      });
+    }
+  }
+
+  // 出力内容を整形
+  const headerRowData = ['月', ...departments];
+  const rows = [headerRowData];
+  for (const key of Object.keys(result).sort()) {
+    const row = [key];
+    departments.forEach(d => row.push(result[key][d] || 0));
+    rows.push(row);
+  }
+
+  // 出力
+  outSheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
+
+  // 数値フォーマット
+  outSheet.getRange(2, 2, rows.length - 1, departments.length)
+    .setNumberFormat('#,##0');
+
+  SpreadsheetApp.getUi().alert('✅ 部門別人件費集計が完了しました！');
+}
