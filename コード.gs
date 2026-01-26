@@ -4,8 +4,48 @@ function buildPayrollMenu_() {
   SpreadsheetApp.getUi()
     .createMenu('給与明細発行')
     .addItem('給与明細（発行月・行を指定）', 'showMonthAndRowsDialog')
+    .addItem('最小ダイアログ（動作確認）', 'showMinimalDialog')
     .addToUi();
   Logger.log('[buildPayrollMenu_] end');
+}
+
+/***** 最小ダイアログ（原因切り分け用） *****/
+function showMinimalDialog() {
+  Logger.log('[showMinimalDialog] start');
+  var html = `
+<html>
+  <head>
+    <base target="_top">
+  </head>
+  <body>
+    <label>最小入力</label><br>
+    <input id="minimalInput" style="width:100%;padding:6px" placeholder="入力してOKを押す">
+    <br><br>
+    <button id="minimalOkBtn" type="button">OK</button>
+    <script>
+      function bindEvents() {
+        var okBtn = document.getElementById("minimalOkBtn");
+        if (okBtn) {
+          okBtn.addEventListener("click", function() {
+            var value = document.getElementById("minimalInput").value;
+            alert("入力値: " + value);
+          });
+        }
+      }
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", bindEvents);
+      } else {
+        bindEvents();
+      }
+    </script>
+  </body>
+</html>`;
+  var htmlOutput = HtmlService.createHtmlOutput(html)
+    .setSandboxMode(HtmlService.SandboxMode.IFRAME)
+    .setWidth(320)
+    .setHeight(220);
+  SpreadsheetApp.getUi().showModalDialog(htmlOutput, '最小ダイアログ');
+  Logger.log('[showMinimalDialog] end');
 }
 
 /***** 月＋行入力のダイアログ *****/
