@@ -10,6 +10,18 @@ function buildPayrollMenu_() {
 function showMonthAndRowsDialog() {
   const html = HtmlService.createHtmlOutput(`
     <h2>給与明細PDF出力</h2>
+    <label>発行年</label><br>
+    <select id="year" style="width:100%;padding:6px">
+      ${(() => {
+        const currentYear = new Date().getFullYear();
+        const years = [];
+        for (let y = currentYear - 2; y <= currentYear + 2; y++) {
+          years.push(`<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}年</option>`);
+        }
+        return years.join('');
+      })()}
+    </select>
+    <br><br>
     <label>発行月</label><br>
     <select id="month" style="width:100%;padding:6px">
       ${[...Array(12)].map((_,i)=>`<option value="${i+1}">${i+1}月</option>`).join('')}
@@ -27,27 +39,30 @@ function showMonthAndRowsDialog() {
         btn.disabled = true;
         btn.innerText = '処理中...';
 
+        var year  = document.getElementById('year').value.trim();
         var month = document.getElementById('month').value.trim();
         var rows  = document.getElementById('rows').value.trim();
+        if(!year){  alert('発行年を選択してください'); btn.disabled=false; btn.innerText='OK'; return; }
         if(!month){ alert('発行月を選択してください'); btn.disabled=false; btn.innerText='OK'; return; }
         if(!rows){  alert('行番号を入力してください'); btn.disabled=false; btn.innerText='OK'; return; }
 
         google.script.run.withSuccessHandler(function(msg){
           if(msg) alert(msg);
           google.script.host.close();
-        }).processMonthAndRows(month, rows);
+        }).processMonthAndRows(year, month, rows);
       }
     </script>
-  `).setWidth(380).setHeight(300);
+  `).setWidth(380).setHeight(360);
   SpreadsheetApp.getUi().showModalDialog(html, '給与明細PDF出力');
 }
 
 /***** ダイアログから処理を呼び出し *****/
-function processMonthAndRows(month, rowsInput) {
+function processMonthAndRows(year, month, rowsInput) {
   const sheetName = `給与明細${month}月支払分`;
   const rowNumbers = parseRowInput(rowsInput);
   if (!rowNumbers.length) return '正しい行番号が入力されていません。';
-  exportRows(sheetName, rowNumbers);
+  const fallbackYear = parseInt(year, 10);
+  exportRows(sheetName, rowNumbers, fallbackYear);
   return '指定した行のPDF出力が完了しました！';
 }
 
@@ -84,7 +99,7 @@ function fetchWithRetry(url, token, retries = 3) {
 }
 
 /***** 実際のPDF出力処理（ここは既存の exportRows の内容を流用） *****/
-function exportRows(sheetName, rowNumbers) {
+function exportRows(sheetName, rowNumbers, fallbackYear) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(sheetName);
   if (!sheet) { SpreadsheetApp.getUi().alert(`シート「${sheetName}」が見つかりません。`); return; }
@@ -107,10 +122,8 @@ function exportRows(sheetName, rowNumbers) {
     if (!name) return;
 
     const monthCell = sheet.getRange(rowNum, 2).getValue();
-    if (!(monthCell instanceof Date)) {
-      SpreadsheetApp.getUi().alert(`【${rowNum}行目／${name}さん：B列が日付ではありません】スキップします。`);
-      return;
-    }
+    const sheetMonthMatch = sheetName.match(/給与明細(\d+)月支払分/);
+    const fallbackMonthNum = sheetMonthMatch ? parseInt(sheetMonthMatch[1], 10) : NaN;
 
     // ==== 数式＆ラベル反映 ====
     for (let r = 0; r < numRows; r++) {
@@ -127,10 +140,24 @@ function exportRows(sheetName, rowNumbers) {
     SpreadsheetApp.flush();
 
     // ==== ファイル名生成 ====
-    const monthText = Utilities.formatDate(monthCell, timezone, 'yyyy/MM');
-    const [yearStr, monthStr] = monthText.split('/');
-    const year = parseInt(yearStr, 10);
-    const monthNum = parseInt(monthStr, 10);
+    let year;
+    let monthNum;
+    if (monthCell instanceof Date) {
+      const monthText = Utilities.formatDate(monthCell, timezone, 'yyyy/MM');
+      const [yearStr, monthStr] = monthText.split('/');
+      year = parseInt(yearStr, 10);
+      monthNum = parseInt(monthStr, 10);
+    } else if (fallbackYear) {
+      year = fallbackYear;
+      monthNum = fallbackMonthNum;
+    } else {
+      SpreadsheetApp.getUi().alert(`【${rowNum}行目／${name}さん：年が確定できません】スキップします。`);
+      return;
+    }
+    if (!monthNum || isNaN(monthNum)) {
+      SpreadsheetApp.getUi().alert(`【${rowNum}行目／${name}さん：月が確定できません】スキップします。`);
+      return;
+    }
     const reiwaYear = year - 2018;
     const safeName = String(name).replace(/[\/\\:*?"<>|]/g, '');
     const fileName = `${safeName}_給与支払明細_令和${reiwaYear}年${monthNum}月分`;
