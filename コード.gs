@@ -11,52 +11,75 @@ function buildPayrollMenu_() {
 /***** 月＋行入力のダイアログ *****/
 function showMonthAndRowsDialog() {
   Logger.log('[showMonthAndRowsDialog] start');
-  const html = HtmlService.createHtmlOutput(`
-    <h2>給与明細PDF出力</h2>
-    <label>発行年</label><br>
-    <select id="year" style="width:100%;padding:6px">
-      ${(() => {
-        const currentYear = parseInt(Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy'), 10);
-        const years = [];
-        for (let y = currentYear - 2; y <= currentYear + 2; y++) {
-          years.push(`<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}年</option>`);
-        }
-        return years.join('');
-      })()}
-    </select>
-    <br><br>
-    <label>発行月</label><br>
-    <select id="month" style="width:100%;padding:6px">
-      ${[...Array(12)].map((_,i)=>`<option value="${i+1}">${i+1}月</option>`).join('')}
-    </select>
-    <br><br>
-    <label>行番号／範囲（複数可）</label><br>
-    <input id="rows" placeholder="例：5-8,12,20-22" style="width:100%;padding:6px">
-    <br><small>カンマ区切りで複数指定、ハイフンで範囲指定できます。</small>
-    <br><br>
-    <button id="okBtn" onclick="submit()">OK</button>
-    <button onclick="google.script.host.close()">キャンセル</button>
-    <script>
-      function submit(){
-        var btn = document.getElementById('okBtn');
-        btn.disabled = true;
-        btn.innerText = '処理中...';
-
-        var year  = document.getElementById('year').value.trim();
-        var month = document.getElementById('month').value.trim();
-        var rows  = document.getElementById('rows').value.trim();
-        if(!year){  alert('発行年を選択してください'); btn.disabled=false; btn.innerText='OK'; return; }
-        if(!month){ alert('発行月を選択してください'); btn.disabled=false; btn.innerText='OK'; return; }
-        if(!rows){  alert('行番号を入力してください'); btn.disabled=false; btn.innerText='OK'; return; }
-
-        google.script.run.withSuccessHandler(function(msg){
-          if(msg) alert(msg);
-          google.script.host.close();
-        }).processMonthAndRows(year, month, rows);
-      }
-    </script>
-  `).setWidth(380).setHeight(360);
-  SpreadsheetApp.getUi().showModalDialog(html, '給与明細PDF出力');
+  var timezone = Session.getScriptTimeZone();
+  var currentYear = parseInt(
+    Utilities.formatDate(new Date(), timezone, 'yyyy'),
+    10
+  );
+  var yearOptions = '';
+  var year;
+  for (year = currentYear - 2; year <= currentYear + 2; year++) {
+    yearOptions += '<option value="' + year + '"';
+    if (year === currentYear) {
+      yearOptions += ' selected';
+    }
+    yearOptions += '>' + year + '年</option>';
+  }
+  var monthOptions = '';
+  var month;
+  for (month = 1; month <= 12; month++) {
+    monthOptions += '<option value="' + month + '">' + month + '月</option>';
+  }
+  var html = '';
+  // Step 1: HTMLを最小構成（input + button）
+  html += '<input id="rows" placeholder="例：5-8,12,20-22" style="width:100%;padding:6px">';
+  html += '<button id="okBtn" onclick="submitForm()">OK</button>';
+  // Step 2: UIの要素を1行ずつ戻す
+  html = '<h2>給与明細PDF出力</h2>' + html;
+  html = '<label>行番号／範囲（複数可）</label><br>' + html;
+  html = html + '<br><small>カンマ区切りで複数指定、ハイフンで範囲指定できます。</small>';
+  html = '<label>発行月</label><br>'
+    + '<select id="month" style="width:100%;padding:6px">'
+    + monthOptions
+    + '</select>'
+    + '<br><br>'
+    + html;
+  html = '<label>発行年</label><br>'
+    + '<select id="year" style="width:100%;padding:6px">'
+    + yearOptions
+    + '</select>'
+    + '<br><br>'
+    + html;
+  html = html + '<br><br><button onclick="google.script.host.close()">キャンセル</button>';
+  html = html
+    + '<script>'
+    + '  function submitForm() {'
+    + '    // Step 3: ボタン取得'
+    + '    var btn = document.getElementById("okBtn");'
+    + '    // Step 4: ボタン無効化'
+    + '    btn.disabled = true;'
+    + '    btn.innerText = "処理中...";'
+    + '    // Step 5: 入力値取得'
+    + '    var yearValue = document.getElementById("year").value;'
+    + '    var monthValue = document.getElementById("month").value;'
+    + '    var rowsValue = document.getElementById("rows").value;'
+    + '    // Step 6: バリデーション'
+    + '    if (!yearValue) { alert("発行年を選択してください"); btn.disabled = false; btn.innerText = "OK"; return; }'
+    + '    if (!monthValue) { alert("発行月を選択してください"); btn.disabled = false; btn.innerText = "OK"; return; }'
+    + '    if (!rowsValue) { alert("行番号を入力してください"); btn.disabled = false; btn.innerText = "OK"; return; }'
+    + '    // Step 7: サーバー呼び出し（ここでダイアログがフリーズ）'
+    + '    google.script.run'
+    + '      .withSuccessHandler(function(msg) {'
+    + '        if (msg) { alert(msg); }'
+    + '        google.script.host.close();'
+    + '      })'
+    + '      .processMonthAndRows(yearValue, monthValue, rowsValue);'
+    + '  }'
+    + '</script>';
+  var htmlOutput = HtmlService.createHtmlOutput(html)
+    .setWidth(380)
+    .setHeight(360);
+  SpreadsheetApp.getUi().showModalDialog(htmlOutput, '給与明細PDF出力');
   Logger.log('[showMonthAndRowsDialog] end');
 }
 
