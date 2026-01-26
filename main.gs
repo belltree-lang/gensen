@@ -76,7 +76,10 @@ function gensenCreateAnnualSummary() {
   const ss = SpreadsheetApp.getActive();
   const year = gensenGetTargetYear_();
   const summary = {};
-  const targetYear = String(year);
+  const targetYear = Number(year);
+  if (Number.isNaN(targetYear)) {
+    throw new Error('設定!B2 に対象年度を入力してください。');
+  }
   const columnMap = {
     month: 2, // B: 月分（YYYY/MM）
     employeeId: 3, // C: 従業員番号
@@ -136,8 +139,8 @@ function gensenCreateAnnualSummary() {
     monthValues.forEach((row, index) => {
       const rowNumber = index + 2;
       const monthValue = row[0];
-      const rowYear = gensenExtractYearFromMonth_(monthValue);
-      if (!rowYear) {
+      const monthInfo = gensenExtractYearFromMonth_(monthValue);
+      if (!monthInfo) {
         gensenLogAnnualSummaryIssue_(
           sheetName,
           rowNumber,
@@ -146,7 +149,13 @@ function gensenCreateAnnualSummary() {
         );
         return;
       }
-      if (rowYear !== targetYear) {
+      const { year: rowYear, month: rowMonth } = monthInfo;
+      if (
+        !(
+          (rowYear === targetYear - 1 && rowMonth === 12) ||
+          (rowYear === targetYear && rowMonth >= 1 && rowMonth <= 11)
+        )
+      ) {
         return;
       }
       const employeeName = String(employeeNameValues[index][0] || '').trim();
@@ -537,21 +546,29 @@ function gensenGetNamedRangeOnSheet_(ss, rangeName, sheet) {
 
 function gensenExtractYearFromMonth_(monthValue) {
   if (!monthValue) {
-    return '';
+    return null;
   }
   if (Object.prototype.toString.call(monthValue) === '[object Date]' && !isNaN(monthValue.getTime())) {
-    return String(monthValue.getFullYear());
+    return { year: monthValue.getFullYear(), month: monthValue.getMonth() + 1 };
   }
   const normalized = String(monthValue).trim();
-  const match = normalized.match(/^(\d{4})\s*\/\s*\d{1,2}$/);
+  const match = normalized.match(/^(\d{4})\s*\/\s*(\d{1,2})$/);
   if (match) {
-    return match[1];
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    if (!Number.isNaN(year) && month >= 1 && month <= 12) {
+      return { year, month };
+    }
   }
   const numericMatch = normalized.match(/^(\d{4})(\d{2})$/);
   if (numericMatch) {
-    return numericMatch[1];
+    const year = Number(numericMatch[1]);
+    const month = Number(numericMatch[2]);
+    if (!Number.isNaN(year) && month >= 1 && month <= 12) {
+      return { year, month };
+    }
   }
-  return '';
+  return null;
 }
 
 function gensenParseAnnualSummaryAmount_(value, sheetName, rowNumber, label) {
