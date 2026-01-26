@@ -212,8 +212,19 @@ function exportRows(sheetName, rowNumbers, uiYear, uiMonth) {
 
   const template       = ss.getSheetByName('給与明細テンプレート');
   const masterTemplate = ss.getSheetByName('給与明細テンプレート元式');
+  const baseSheet      = ss.getSheetByName('給与明細 管理');
   const folder         = DriveApp.getFolderById('1Jw_QcZ1ph_mi92Y5I2efvpg15VivyV1X');
   const spreadsheetId  = ss.getId();
+
+  if (!baseSheet) {
+    SpreadsheetApp.getUi().alert('シート「給与明細 管理」が見つかりません。');
+    return;
+  }
+
+  const baseDate = baseSheet.getRange('B2').getValue();
+  const baseYear = baseDate.getFullYear();
+  const baseMonth = baseDate.getMonth() + 1;
+  const reiwaYear = baseYear - 2018;
 
   const dataRange      = masterTemplate.getDataRange();
   const numRows        = dataRange.getNumRows();
@@ -246,8 +257,8 @@ function exportRows(sheetName, rowNumbers, uiYear, uiMonth) {
     SpreadsheetApp.flush();
 
     // ==== 対象年月・発行日 ====
-    const issueDate = new Date(uiYear, uiMonth, 0);
-    const targetYm = `${uiYear}年${uiMonth}月分`;
+    const issueDate = baseDate;
+    const targetYm = `${baseYear}年${baseMonth}月分`;
     const issueDateRange = getTemplateRange_(ss, template, 'PAYROLL_ISSUE_DATE', PAYROLL_TEMPLATE_CONFIG.issueDateCell);
     const targetYmRange = getTemplateRange_(ss, template, 'PAYROLL_TARGET_YM', PAYROLL_TEMPLATE_CONFIG.targetYmCell);
     if (!issueDateRange || !targetYmRange) {
@@ -260,10 +271,6 @@ function exportRows(sheetName, rowNumbers, uiYear, uiMonth) {
     Logger.log(`[exportRows] row=${rowNum} name=${name} uiYear=${uiYear} uiMonth=${uiMonth} issueDate=${issueDate} targetYm=${targetYm}`);
 
     // ==== ファイル名生成 ====
-    const sheetBaseDate = sheet.getRange('B2').getValue();
-    const baseYear = sheetBaseDate.getFullYear();
-    const baseMonth = sheetBaseDate.getMonth() + 1;
-    const reiwaYear = baseYear - 2018;
     const safeName = String(name).replace(/[\/\\:*?"<>|]/g, '');
     const fileName = `${safeName}_給与支払明細_令和${reiwaYear}年${baseMonth}月分`;
 
