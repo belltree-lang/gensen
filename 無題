@@ -6,7 +6,7 @@
 function buildCostMenu_() {
   SpreadsheetApp.getUi()
     .createMenu('人件費')
-    .addItem('部門別人件費集計', 'calcMonthlyCostByDepartment')
+    .addItem('部門別・月別人件費集計', 'calcMonthlyCostByDepartment')
     .addToUi();
 }
 
