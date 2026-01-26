@@ -260,9 +260,12 @@ function exportRows(sheetName, rowNumbers, uiYear, uiMonth) {
     Logger.log(`[exportRows] row=${rowNum} name=${name} uiYear=${uiYear} uiMonth=${uiMonth} issueDate=${issueDate} targetYm=${targetYm}`);
 
     // ==== ファイル名生成 ====
-    const reiwaYear = uiYear - 2018;
+    const sheetBaseDate = sheet.getRange('B2').getValue();
+    const baseYear = sheetBaseDate.getFullYear();
+    const baseMonth = sheetBaseDate.getMonth() + 1;
+    const reiwaYear = baseYear - 2018;
     const safeName = String(name).replace(/[\/\\:*?"<>|]/g, '');
-    const fileName = `${safeName}_給与支払明細_令和${reiwaYear}年${uiMonth}月分`;
+    const fileName = `${safeName}_給与支払明細_令和${reiwaYear}年${baseMonth}月分`;
 
     const folderName = `${safeName}殿`;
     const folders = folder.getFoldersByName(folderName);
