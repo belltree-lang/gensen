@@ -146,12 +146,12 @@ function showMonthAndRowsDialog() {
 /***** ダイアログから処理を呼び出し *****/
 function processMonthAndRows(year, month, rowsInput) {
   Logger.log(`[processMonthAndRows] start year=${year} month=${month} rowsInput=${rowsInput}`);
-  const sheetName = `給与明細${month}月支払分`;
   const rowNumbers = parseRowInput(rowsInput);
   if (!rowNumbers.length) return '正しい行番号が入力されていません。';
   const uiYear = parseInt(year, 10);
   const uiMonth = parseInt(month, 10);
-  exportRows(sheetName, rowNumbers, uiYear, uiMonth);
+  const activeSheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  exportRows(activeSheet.getName(), rowNumbers, uiYear, uiMonth);
   Logger.log(`[processMonthAndRows] end rowNumbers=${rowNumbers.join(',')}`);
   return '指定した行のPDF出力が完了しました！';
 }
@@ -212,16 +212,14 @@ function exportRows(sheetName, rowNumbers, uiYear, uiMonth) {
 
   const template       = ss.getSheetByName('給与明細テンプレート');
   const masterTemplate = ss.getSheetByName('給与明細テンプレート元式');
-  const baseSheet      = ss.getSheetByName('給与明細 管理');
   const folder         = DriveApp.getFolderById('1Jw_QcZ1ph_mi92Y5I2efvpg15VivyV1X');
   const spreadsheetId  = ss.getId();
 
-  if (!baseSheet) {
-    SpreadsheetApp.getUi().alert('シート「給与明細 管理」が見つかりません。');
+  const baseDate = sheet.getRange('B2').getValue();
+  if (!(baseDate instanceof Date) || isNaN(baseDate.getTime())) {
+    SpreadsheetApp.getUi().alert(`シート「${sheetName}」のB2に有効な日付を入力してください。`);
     return;
   }
-
-  const baseDate = baseSheet.getRange('B2').getValue();
   const baseYear = baseDate.getFullYear();
   const baseMonth = baseDate.getMonth() + 1;
   const reiwaYear = baseYear - 2018;
@@ -239,6 +237,10 @@ function exportRows(sheetName, rowNumbers, uiYear, uiMonth) {
 
     if (!uiYear || !uiMonth || uiMonth < 1 || uiMonth > 12 || isNaN(uiYear) || isNaN(uiMonth)) {
       SpreadsheetApp.getUi().alert(`【${rowNum}行目／${name}さん：年月が不正です】発行年・発行月を確認してください。`);
+      return;
+    }
+    if (uiYear !== baseYear || uiMonth !== baseMonth) {
+      SpreadsheetApp.getUi().alert(`【${rowNum}行目／${name}さん：年月が一致しません】B2の日付と発行年・発行月を確認してください。`);
       return;
     }
 
@@ -268,7 +270,7 @@ function exportRows(sheetName, rowNumbers, uiYear, uiMonth) {
     issueDateRange.setValue(issueDate);
     targetYmRange.setValue(targetYm);
 
-    Logger.log(`[exportRows] row=${rowNum} name=${name} uiYear=${uiYear} uiMonth=${uiMonth} issueDate=${issueDate} targetYm=${targetYm}`);
+    Logger.log(`[exportRows] row=${rowNum} name=${name} baseYear=${baseYear} baseMonth=${baseMonth} issueDate=${issueDate} targetYm=${targetYm}`);
 
     // ==== ファイル名生成 ====
     const safeName = String(name).replace(/[\/\\:*?"<>|]/g, '');
